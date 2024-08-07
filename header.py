@@ -14,7 +14,6 @@ def configer(domain):
     main_config["outbounds"][0]["streamSettings"]["tcpSettings"]["header"]["request"]["headers"]["Host"] = domain
     open("./config.json", "wt").write(dumps(main_config))
 
-
 def findport() -> int:
     with open("./main.json", "rt") as config_file:
         for inbound in loads(config_file.read())["inbounds"]:
@@ -23,11 +22,10 @@ def findport() -> int:
 
     raise "Socks inbound required!"
 
-
-async def main():
-    scanned_count = 1
+async def main(start_line=0):
+    scanned_count = start_line
     port = findport()
-    domains = open("./List_26.txt", "rt").read().split("\n")
+    domains = open("./List_1.txt", "rt").read().split("\n")
 
     if isfile("./result.csv"):
         result = open("./result.csv", "at")
@@ -35,7 +33,7 @@ async def main():
         result = open("./result.csv", "at")
         result.write("Domain,Delay\r")
 
-    for domain in domains:
+    for domain in domains[start_line:]:
         # generate config file
         try:
             configer(domain.strip())
@@ -60,7 +58,7 @@ async def main():
                     result.write(f"{domain},{int(latency * 1000)}\n")
                     print(f"{scanned_count}. {domain}: {int(latency * 1000)}")
         except:  # noqa: E722
-            print(f"{scanned_count}. {domain},Timeout")
+            print(f"{scanned_count}. {domain},timeout")
 
         # kill the xray
         xray.terminate()
@@ -68,5 +66,6 @@ async def main():
         scanned_count += 1
         await sleep(0.1)
 
-
-run(main())
+# Set start_line to the desired line number to start from (0-based index)
+start_line = 0  # For example, to start from line 1
+run(main(start_line))
