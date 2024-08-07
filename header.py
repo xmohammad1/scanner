@@ -1,5 +1,6 @@
 from asyncio import create_subprocess_exec, run, sleep
 from json import loads, dumps
+from os import devnull
 from os.path import isfile
 from httpx import AsyncClient, Timeout
 from time import perf_counter
@@ -41,7 +42,11 @@ async def main():
             continue
 
         # run xray with config
-        xray = await create_subprocess_exec("./xray.exe")
+        xray = await create_subprocess_exec(
+            "./xray.exe",
+            stdout=open(devnull, 'wb'),
+            stderr=open(devnull, 'wb')
+        )
 
         try:
             # httpx client using proxy to xray socks
