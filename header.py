@@ -25,7 +25,7 @@ def findport() -> int:
 
 async def main():
     port = findport()
-    domains = open("D:\Domains\List_11.txt", "rt").read().split("\n")
+    domains = open("./List_1.txt", "rt").read().split("\n")
 
     if isfile("./result.csv"):
         result = open("./result.csv", "at")
