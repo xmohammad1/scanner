@@ -56,8 +56,8 @@ async def main():
                 etime = perf_counter()
                 if req.status_code == 204 or req.status_code == 200:
                     latency = etime - stime
-                    result.write(f"{domain}, {int(latency * 1000)}\n")
-                    print(f"{domain},{int(latency * 1000)}")
+                    result.write(f"{domain},{int(latency * 1000)}\n")
+                    print(f"{domain}: {int(latency * 1000)}")
         except:  # noqa: E722
             print(f"{domain},Timeout")
 
