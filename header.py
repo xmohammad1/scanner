@@ -1,9 +1,9 @@
 from asyncio import create_subprocess_exec, run, sleep
 from json import loads, dumps
-from os import devnull
 from os.path import isfile
 from httpx import AsyncClient, Timeout
 from time import perf_counter
+from os import devnull
 
 # Script config
 get_timeout = 1.0
@@ -25,8 +25,9 @@ def findport() -> int:
 
 
 async def main():
+    scanned_count = 1
     port = findport()
-    domains = open("./List_1.txt", "rt").read().split("\n")
+    domains = open("./List_26.txt", "rt").read().split("\n")
 
     if isfile("./result.csv"):
         result = open("./result.csv", "at")
@@ -57,14 +58,14 @@ async def main():
                 if req.status_code == 204 or req.status_code == 200:
                     latency = etime - stime
                     result.write(f"{domain},{int(latency * 1000)}\n")
-                    print(f"{domain}: {int(latency * 1000)}")
+                    print(f"{scanned_count}. {domain}: {int(latency * 1000)}")
         except:  # noqa: E722
-            print(f"{domain},Timeout")
+            print(f"{scanned_count}. {domain},Timeout")
 
         # kill the xray
         xray.terminate()
         xray.kill()
-
+        scanned_count += 1
         await sleep(0.1)
 
 
