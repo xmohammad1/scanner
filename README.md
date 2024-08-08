@@ -1,1 +1,1 @@
-thanks to the @radioactiveAHM for base codes
+thanks to the https://github.com/radioactiveAHM for base codes
