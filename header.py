@@ -4,6 +4,7 @@ from httpx import AsyncClient, Timeout
 from time import perf_counter
 from os import devnull
 import aiofiles
+import socketserver
 
 # Script config
 list_file="./List_1.txt"
@@ -11,24 +12,23 @@ get_timeout = 1.0
 connect_timeout = 1.0
 
 result_filename = "./result.csv"
-async def configer(domain):
+async def configer(domain, port):
     async with aiofiles.open("./main.json", "rt") as main_config_file:
         main_config = loads(await main_config_file.read())
     main_config["outbounds"][0]["streamSettings"]["tcpSettings"]["header"]["request"]["headers"]["Host"] = domain
+    main_config["inbounds"][0]["port"] = port # Add free port to socks protocol
+    main_config["inbounds"][1]["port"] = port + 1 # Add different port to http protocol
     async with aiofiles.open("./config.json", "wt") as config_file:
         await config_file.write(dumps(main_config))
 
-def findport() -> int:
-    with open("./main.json", "rt") as config_file:
-        for inbound in loads(config_file.read())["inbounds"]:
-            if inbound["protocol"] == "socks":
-                return inbound["port"]
-
-    raise "Socks inbound required!"
+def get_free_port() -> int:
+    """returns a free port"""
+    with socketserver.TCPServer(("localhost", 0), None) as s:
+        return s.server_address[1]
 
 async def main(start_line=0):
     scanned_count = start_line
-    port = findport()
+    port = get_free_port()
     domains = open("./List_1.txt", "rt").read().split("\n")
 
     async with aiofiles.open(list_file, "rt") as domains_file:
@@ -39,7 +39,7 @@ async def main(start_line=0):
     for domain in domains[start_line:]:
         # generate config file
         try:
-            await configer(domain.strip())
+            await configer(domain.strip(),port)
         except:  # noqa: E722
             continue
 
@@ -68,6 +68,5 @@ async def main(start_line=0):
         await xray.wait()
         scanned_count += 1
 
-# Set start_line to the desired line number to start from (0-based index)
 start_line = 0  # For example, to start from line 1
 run(main(start_line))
