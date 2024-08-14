@@ -110,8 +110,8 @@ async def main():
                         print("jitter latencies=",Latencis)
             except:  # noqa: E722
                 print(f"{domain} Timeout")
-    
-            xray.kill()  # Kill process if termination fail
+            xray.terminate()
+            await xray.wait()
     except KeyboardInterrupt:
         print("\nScript interrupted! Saving progress...")
 
