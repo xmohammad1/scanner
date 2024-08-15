@@ -10,6 +10,7 @@ import socketserver
 list_file="./List_1.txt"
 get_timeout = 1.0
 connect_timeout = 1.0
+first_test = "x.com"
 
 result_filename = "./result.csv"
 async def configer(domain, port):
@@ -29,7 +30,26 @@ def get_free_port() -> int:
 async def main(start_line=0):
     scanned_count = start_line
     port = get_free_port()
-    domains = open("./List_1.txt", "rt").read().split("\n")
+    # Prestart test with first_test
+    try:
+        await configer(first_test, port)
+        xray = await create_subprocess_exec(
+            "./xray.exe",
+            stdout=open(devnull, 'wb'),
+            stderr=open(devnull, 'wb')
+        )
+        async with AsyncClient(proxy=f'socks5://127.0.0.1:{port}', timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
+            stime = perf_counter()
+            req = await client.get(url="https://www.gstatic.com/generate_204")
+            etime = perf_counter()
+            if req.status_code == 204 or req.status_code == 200:
+                latency = etime - stime
+                print(f"Prestart test {first_test}: {int(latency * 1000)} ms")
+    except Exception as e:
+        print(f"Prestart test {first_test} failed: {e}")
+    finally:
+        xray.terminate()
+        await xray.wait()
 
     async with aiofiles.open(list_file, "rt") as domains_file:
         domains = (await domains_file.read()).splitlines()
