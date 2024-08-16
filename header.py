@@ -7,7 +7,7 @@ import aiofiles
 import socketserver
 
 # Script config
-start_line = 0  # For example, to start from line 1
+start_line = 0
 first_test = "x.com"
 list_file="./List_1.txt"
 result_filename = "./result.csv"
