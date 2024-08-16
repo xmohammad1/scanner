@@ -7,10 +7,12 @@ import aiofiles
 import socketserver
 
 # Script config
+start_line = 0  # For example, to start from line 1
+first_test = "x.com"
 list_file="./List_1.txt"
+result_filename = "./result.csv"
 get_timeout = 1.0
 connect_timeout = 1.0
-first_test = "x.com"
 
 result_filename = "./result.csv"
 async def configer(domain, port):
@@ -88,5 +90,4 @@ async def main(start_line=0):
         await xray.wait()
         scanned_count += 1
 
-start_line = 0  # For example, to start from line 1
 run(main(start_line))
