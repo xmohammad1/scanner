@@ -4,8 +4,8 @@ import asyncio
 from httpx import TimeoutException, ConnectError
 
 # File paths
-domain_list = "domain_list.txt"
-save_to = "sub_list.txt"
+domain_list = "./Hiddify.txt"
+save_to = "./sub_list.txt"
 
 async def retry_request(url, retries=3, delay=3, timeout=10):
     async with httpx.AsyncClient() as client:
@@ -74,22 +74,22 @@ async def main():
             return
 
         all_subdomains = set()
+
         for domain in domains:
             print(f"Fetching subdomains for {domain}...")
             combined_subdomains = await fetch_subdomains(domain)
+
+            # Write to the file in append mode to ensure data is saved incrementally
+            async with aiofiles.open(save_to, 'a') as sub_file:
+                for subdomain in sorted(combined_subdomains):
+                    if subdomain not in all_subdomains:  # Avoid duplicates in output
+                        await sub_file.write(subdomain + "\n")
+
             all_subdomains.update(combined_subdomains)
             print(f"Found {len(combined_subdomains)} subdomains for {domain}")
             await asyncio.sleep(1)  # Sleep to avoid making requests too quickly
 
-        try:
-            async with aiofiles.open(save_to, 'w') as sub_file:
-                for subdomain in sorted(all_subdomains):
-                    await sub_file.write(subdomain + "\n")
-        except IOError as e:
-            print(f"Failed to write to {save_to}: {e}")
-
         print("Subdomains saved to sub_list.txt")
-        print(f"Total subdomains found: {len(all_subdomains)}")
 
     except KeyboardInterrupt:
         print("\nProcess interrupted by user. Exiting...")
