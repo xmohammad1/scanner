@@ -31,14 +31,20 @@ async def configer(domain, port_socks, port_http, config_index):
         await config_file.write(dumps(main_config))
     return config_filename
 
+async def get_unique_ports():
+    while True:
+        port_socks = get_free_port()
+        port_http = get_free_port()
+        if port_socks != port_http:
+            return port_socks, port_http
+
 def get_free_port() -> int:
     """returns a free port"""
     with socketserver.TCPServer(("localhost", 0), None) as s:
         return s.server_address[1]
 
 async def scan_domain(domain, scanned_count, semaphore, config_index):
-    port_socks = get_free_port()
-    port_http = get_free_port()
+    port_socks, port_http = await get_unique_ports()
     async with semaphore:
         try:
             config_filename = await configer(domain.strip(), port_socks, port_http, config_index)
@@ -77,10 +83,7 @@ async def scan_domain(domain, scanned_count, semaphore, config_index):
 async def main(start_line=0):
     scanned_count = start_line
     semaphore = Semaphore(threads)  # Limit the number of concurrent scans
-
-    # Prestart test with first_test
-    port_socks = get_free_port()
-    port_http = get_free_port()
+    port_socks, port_http = await get_unique_ports()
     xray = None
     try:
         config_filename = await configer(first_test, port_socks, port_http, "prestart")
