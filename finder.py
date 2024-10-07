@@ -1,7 +1,6 @@
 import aiofiles
 import httpx
 import asyncio
-from httpx import TimeoutException, ConnectError
 
 # File paths
 domain_list = "./Hiddify.txt"
@@ -19,12 +18,8 @@ async def retry_request(url, retries=3, delay=3, timeout=10):
                     await asyncio.sleep(delay * 2)  # Longer wait for rate limit
                 else:
                     print(f"Failed to fetch data from {url}, status code: {response.status_code}")
-            except TimeoutException:
-                print(f"Attempt {attempt + 1} - Timeout occurred for {url}. Retrying...")
-            except ConnectError:
-                print(f"Attempt {attempt + 1} - Connection error occurred for {url}. Retrying...")
-            except httpx.RequestError as e:
-                print(f"Attempt {attempt + 1} - An error occurred: {e}")
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.RequestError) as e:
+                print(f"Attempt {attempt} - Error occurred for {url}: {e}. Retrying in {delay} seconds...")
             await asyncio.sleep(delay)  # Wait before retrying
     return None
 
@@ -66,27 +61,34 @@ async def fetch_subdomains(domain):
 
 async def main():
     try:
+        # Read domains from domain_list.txt
         async with aiofiles.open(domain_list, 'r') as domain_file:
             domains = [line.strip() for line in await domain_file.readlines()]
 
         if not domains:
             print("No domains to process. Please check your domain_list.txt file.")
             return
-
-        all_subdomains = set()
+        # Read existing subdomains from sub_list.txt
+        try:
+            async with aiofiles.open(save_to, 'r') as sub_file:
+                existing_subdomains = set(line.strip() for line in await sub_file.readlines())
+        except FileNotFoundError:
+            existing_subdomains = set()
 
         for domain in domains:
             print(f"Fetching subdomains for {domain}...")
             combined_subdomains = await fetch_subdomains(domain)
-
-            # Write to the file in append mode to ensure data is saved incrementally
-            async with aiofiles.open(save_to, 'a') as sub_file:
-                for subdomain in sorted(combined_subdomains):
-                    if subdomain not in all_subdomains:  # Avoid duplicates in output
+            new_subdomains = set()
+            for subdomain in combined_subdomains:
+                subdomain = subdomain.lstrip("*.").lower()
+                if subdomain not in existing_subdomains:
+                    new_subdomains.add(subdomain)
+                    existing_subdomains.add(subdomain)  # Update the set to prevent duplicates in the same run
+                    # Write the new subdomain to the file immediately
+                    async with aiofiles.open(save_to, 'a') as sub_file:
                         await sub_file.write(subdomain + "\n")
 
-            all_subdomains.update(combined_subdomains)
-            print(f"Found {len(combined_subdomains)} subdomains for {domain}")
+            print(f"Found {len(combined_subdomains)} subdomains for {domain}, {len(new_subdomains)} new.")
             await asyncio.sleep(1)  # Sleep to avoid making requests too quickly
 
         print("Subdomains saved to sub_list.txt")
