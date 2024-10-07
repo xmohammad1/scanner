@@ -1,6 +1,6 @@
-import requests
+import httpx
 import time
-from requests.exceptions import Timeout, ConnectionError
+from httpx import TimeoutException, ConnectError
 
 # File paths
 domain_list = "domain_list.txt"
@@ -9,7 +9,7 @@ save_to = "sub_list.txt"
 def retry_request(url, retries=3, delay=3, timeout=10):
     for attempt in range(retries):
         try:
-            response = requests.get(url, timeout=timeout)
+            response = httpx.get(url, timeout=timeout)
             if response.status_code == 200:
                 return response
             elif response.status_code == 429:
@@ -17,11 +17,11 @@ def retry_request(url, retries=3, delay=3, timeout=10):
                 time.sleep(delay * 2)  # Longer wait for rate limit
             else:
                 print(f"Failed to fetch data from {url}, status code: {response.status_code}")
-        except Timeout:
+        except TimeoutException:
             print(f"Attempt {attempt + 1} - Timeout occurred for {url}. Retrying...")
-        except ConnectionError:
+        except ConnectError:
             print(f"Attempt {attempt + 1} - Connection error occurred for {url}. Retrying...")
-        except requests.RequestException as e:
+        except httpx.RequestError as e:
             print(f"Attempt {attempt + 1} - An error occurred: {e}")
         time.sleep(delay)  # Wait before retrying
     return None
