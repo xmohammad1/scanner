@@ -69,7 +69,7 @@ async def scan_domain(domain, scanned_count, semaphore, config_index):
                     latency = etime - stime
                     async with aiofiles.open(result_filename, "a") as result_file:
                         await result_file.write(f"{domain},{int(latency * 1000)}\n")
-                    print(f"{scanned_count}. {domain}: {int(latency * 1000)}")
+                    print(f"{scanned_count}. {domain}: {int(latency * 1000)} ms")
         except:  # noqa: E722
             print(f"{scanned_count}. {domain},timeout")
         finally:
