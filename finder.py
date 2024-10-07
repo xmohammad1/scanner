@@ -3,7 +3,7 @@ import httpx
 import asyncio
 
 # File paths
-domain_list = "./Hiddify.txt"
+domain_list = "./domain_list.txt"
 save_to = "./sub_list.txt"
 
 async def retry_request(url, retries=3, delay=3, timeout=10):
