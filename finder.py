@@ -6,21 +6,19 @@ import asyncio
 domain_list = "./domain_list.txt"
 save_to = "./sub_list.txt"
 
-async def retry_request(url, retries=3, delay=3, timeout=10):
+async def retry_request(url, retries=8, delay=3, timeout=10):
     async with httpx.AsyncClient() as client:
-        for attempt in range(retries):
+        for attempt in range(1, retries + 1):
             try:
                 response = await client.get(url, timeout=timeout)
                 if response.status_code == 200:
                     return response
-                elif response.status_code == 429:
-                    print(f"Rate limit exceeded for {url}. Retrying after {delay * 2} seconds...")
-                    await asyncio.sleep(delay * 2)  # Longer wait for rate limit
                 else:
-                    print(f"Failed to fetch data from {url}, status code: {response.status_code}")
-            except (httpx.TimeoutException, httpx.ConnectError, httpx.RequestError) as e:
+                    await asyncio.sleep(delay * 2)
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.RequestError, httpx.TransportError) as e:
                 print(f"Attempt {attempt} - Error occurred for {url}: {e}. Retrying in {delay} seconds...")
-            await asyncio.sleep(delay)  # Wait before retrying
+                await asyncio.sleep(delay)
+                continue  # Continue the retry loop
     return None
 
 async def get_crtsh_subdomains(domain):
