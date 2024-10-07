@@ -1,34 +1,36 @@
+import aiofiles
 import httpx
-import time
+import asyncio
 from httpx import TimeoutException, ConnectError
 
 # File paths
 domain_list = "domain_list.txt"
 save_to = "sub_list.txt"
 
-def retry_request(url, retries=3, delay=3, timeout=10):
-    for attempt in range(retries):
-        try:
-            response = httpx.get(url, timeout=timeout)
-            if response.status_code == 200:
-                return response
-            elif response.status_code == 429:
-                print(f"Rate limit exceeded for {url}. Retrying after {delay * 2} seconds...")
-                time.sleep(delay * 2)  # Longer wait for rate limit
-            else:
-                print(f"Failed to fetch data from {url}, status code: {response.status_code}")
-        except TimeoutException:
-            print(f"Attempt {attempt + 1} - Timeout occurred for {url}. Retrying...")
-        except ConnectError:
-            print(f"Attempt {attempt + 1} - Connection error occurred for {url}. Retrying...")
-        except httpx.RequestError as e:
-            print(f"Attempt {attempt + 1} - An error occurred: {e}")
-        time.sleep(delay)  # Wait before retrying
+async def retry_request(url, retries=3, delay=3, timeout=10):
+    async with httpx.AsyncClient() as client:
+        for attempt in range(retries):
+            try:
+                response = await client.get(url, timeout=timeout)
+                if response.status_code == 200:
+                    return response
+                elif response.status_code == 429:
+                    print(f"Rate limit exceeded for {url}. Retrying after {delay * 2} seconds...")
+                    await asyncio.sleep(delay * 2)  # Longer wait for rate limit
+                else:
+                    print(f"Failed to fetch data from {url}, status code: {response.status_code}")
+            except TimeoutException:
+                print(f"Attempt {attempt + 1} - Timeout occurred for {url}. Retrying...")
+            except ConnectError:
+                print(f"Attempt {attempt + 1} - Connection error occurred for {url}. Retrying...")
+            except httpx.RequestError as e:
+                print(f"Attempt {attempt + 1} - An error occurred: {e}")
+            await asyncio.sleep(delay)  # Wait before retrying
     return None
 
-def get_crtsh_subdomains(domain):
+async def get_crtsh_subdomains(domain):
     url = f"https://crt.sh/?q=%25.{domain}&output=json"
-    response = retry_request(url)
+    response = await retry_request(url)
     if response:
         try:
             data = response.json()
@@ -44,9 +46,9 @@ def get_crtsh_subdomains(domain):
             print(f"Failed to decode JSON from response for {domain}. Response content: {response.text[:100]}...")
     return set()
 
-def get_alienvault_subdomains(domain):
+async def get_alienvault_subdomains(domain):
     url = f'https://otx.alienvault.com/api/v1/indicators/domain/{domain}/passive_dns'
-    response = retry_request(url)
+    response = await retry_request(url)
     if response:
         try:
             data = response.json()
@@ -57,10 +59,15 @@ def get_alienvault_subdomains(domain):
             print(f"Failed to decode JSON from response for {domain}. Response content: {response.text[:100]}...")
     return set()
 
-def main():
+async def fetch_subdomains(domain):
+    crtsh_subdomains = await get_crtsh_subdomains(domain)
+    alienvault_subdomains = await get_alienvault_subdomains(domain)
+    return crtsh_subdomains.union(alienvault_subdomains)
+
+async def main():
     try:
-        with open(domain_list, 'r') as domain_file:
-            domains = [line.strip() for line in domain_file]
+        async with aiofiles.open(domain_list, 'r') as domain_file:
+            domains = [line.strip() for line in await domain_file.readlines()]
 
         if not domains:
             print("No domains to process. Please check your domain_list.txt file.")
@@ -69,17 +76,15 @@ def main():
         all_subdomains = set()
         for domain in domains:
             print(f"Fetching subdomains for {domain}...")
-            crtsh_subdomains = get_crtsh_subdomains(domain)
-            alienvault_subdomains = get_alienvault_subdomains(domain)
-            combined_subdomains = crtsh_subdomains.union(alienvault_subdomains)
+            combined_subdomains = await fetch_subdomains(domain)
             all_subdomains.update(combined_subdomains)
             print(f"Found {len(combined_subdomains)} subdomains for {domain}")
-            time.sleep(1)  # Sleep to avoid making requests too quickly
+            await asyncio.sleep(1)  # Sleep to avoid making requests too quickly
 
         try:
-            with open(save_to, 'w') as sub_file:
+            async with aiofiles.open(save_to, 'w') as sub_file:
                 for subdomain in sorted(all_subdomains):
-                    sub_file.write(subdomain + "\n")
+                    await sub_file.write(subdomain + "\n")
         except IOError as e:
             print(f"Failed to write to {save_to}: {e}")
 
@@ -90,4 +95,4 @@ def main():
         print("\nProcess interrupted by user. Exiting...")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
