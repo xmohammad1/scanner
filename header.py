@@ -12,8 +12,8 @@ start_line = 0
 first_test = "x.com"
 list_file = "./List1.txt"
 result_filename = "./result.csv"
-get_timeout = 2.0
-connect_timeout = 2.0
+get_timeout = 1.0
+connect_timeout = 3.0
 threads = 6
 
 
