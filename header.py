@@ -3,11 +3,8 @@ from json import loads, dumps
 from httpx import Client, Timeout
 from time import perf_counter
 from os import makedirs
-import socketserver
-import shutil
-import os
+import shutil, os, socketserver, threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 
 
 # Script configuration
@@ -33,7 +30,14 @@ def thread_safe_print(*args, **kwargs):
     """
     with print_lock:
         print(*args, **kwargs)
-
+# Function to check if the result file is writable
+def is_file_writable(filename):
+    try:
+        with open(filename, 'a') as f:
+            f.write("")
+        return True
+    except IOError:
+        return False
 # Clean up existing configuration directory and create a new one
 # This ensures that each run starts with a fresh set of configuration files
 shutil.rmtree('./configs', ignore_errors=True)
@@ -111,7 +115,10 @@ def scan_domain(domain, scanned_count, config_index):
 
 def main(start_line=0):
     scanned_count = start_line
-
+    # Check if the result file is writable
+    if not is_file_writable(result_filename):
+        print(f"Error: Cannot write to {result_filename}. The file may be opened by another program. Please close it and try again.")
+        exit()
     # Generate ports for the initial test
     port_socks, port_http = get_unique_ports()
     xray = None
