@@ -10,24 +10,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Script configuration
 start_line = 0                   # The starting line number in the domain list file from which to begin scanning
 first_test = "x.com"             # Domain used for an PreStart test to verify setup
-list_file = "./List_1.txt"      # File that contains the list of domains to be scanned
+list_file = "./List_1.txt"       # File that contains the list of domains to be scanned
 result_filename = "./result.csv" # File where scan results will be stored
 get_timeout = 1.0                # Timeout duration (in seconds) for GET requests
 connect_timeout = 3.0            # Timeout duration (in seconds) for connection attempts
 threads = 10                     # Number of threads to use for scanning domains
 
 
-# Lock for thread-safe writing to the result file
-write_lock = threading.Lock()
-
-# Lock for thread-safe printing to the console
-print_lock = threading.Lock()
-
+# Lock for thread-safe printing to the console and result file
+write_lock, print_lock = threading.Lock(), threading.Lock()
 # Function for thread-safe printing
 def thread_safe_print(*args, **kwargs):
-    """
-    Prints messages in a thread-safe manner, ensuring that output from different threads does not overlap.
-    """
     with print_lock:
         print(*args, **kwargs)
 # Function to check if the result file is writable
@@ -79,13 +72,8 @@ def scan_domain(domain, scanned_count, config_index):
     except Exception as e:
         thread_safe_print(f"Error configuring domain {domain}: {e}")
         return
-
     # Run xray with the generated configuration
-    xray = Popen([
-        "./xray.exe",
-        "-c", config_filename
-    ], stdout=DEVNULL, stderr=DEVNULL)
-
+    xray = Popen(["./xray.exe", "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
     try:
         # Create an HTTP client that uses the xray SOCKS proxy
         with Client(proxies=f'socks5://127.0.0.1:{port_socks}', timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
@@ -94,7 +82,7 @@ def scan_domain(domain, scanned_count, config_index):
             req = client.get(url="https://www.gstatic.com/generate_204")
             etime = perf_counter()
             # Check response and record latency if successful
-            if req.status_code == 204 or req.status_code == 200:
+            if req.status_code in [200, 204]:
                 latency = etime - stime
                 # Write the result to the output file
                 with write_lock:
@@ -107,8 +95,8 @@ def scan_domain(domain, scanned_count, config_index):
     finally:
         # Ensure that the xray process is terminated to free resources
         if xray.poll() is None:
-            xray.terminate()
             try:
+                xray.terminate()
                 xray.wait()
             except ProcessLookupError:
                 thread_safe_print(f"Process for domain {domain} already terminated.")
@@ -126,23 +114,20 @@ def main(start_line=0):
     # Perform an initial test to verify that xray and proxy configuration are working correctly
     try:
         config_filename = configer(first_test, port_socks, port_http, "prestart")
-        xray = Popen([
-            "./xray.exe",
-            "-c", config_filename
-        ], stdout=DEVNULL, stderr=DEVNULL)
+        xray = Popen(["./xray.exe", "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
         with Client(proxies=f'socks5://127.0.0.1:{port_socks}', timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
             stime = perf_counter()
             req = client.get(url="https://www.gstatic.com/generate_204")
             etime = perf_counter()
-            if req.status_code == 204 or req.status_code == 200:
+            if req.status_code in [200, 204]:
                 latency = etime - stime
                 thread_safe_print(f"Prestart test {first_test}: {int(latency * 1000)} ms")
     except Exception as e:
         thread_safe_print(f"Prestart test {first_test} TimeOut")
     finally:
         if xray is not None and xray.poll() is None:
-            xray.terminate()
             try:
+                xray.terminate()
                 xray.wait()
             except ProcessLookupError:
                 thread_safe_print(f"Process for prestart test already terminated.")
