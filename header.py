@@ -38,7 +38,7 @@ makedirs('./configs')
 
 def configer(domain, port_socks, port_http, config_index):
     # Read the base configuration template
-    with open("./main.json", "rt") as main_config_file:
+    with open("./main.json", "r", encoding="utf-8") as main_config_file:
         main_config = loads(main_config_file.read())
     # Update configuration with specific domain and ports
     main_config["outbounds"][0]["streamSettings"]["tcpSettings"]["header"]["request"]["headers"]["Host"] = domain
@@ -133,7 +133,7 @@ def main(start_line=0):
                 thread_safe_print(f"Process for prestart test already terminated.")
 
     # Read domains from the input file
-    with open(list_file, "rt") as domains_file:
+    with open(list_file, "r", encoding="utf-8") as domains_file:
         domains = domains_file.read().splitlines()
 
     # Initialize result file if it does not exist or is empty
