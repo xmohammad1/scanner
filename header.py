@@ -133,7 +133,7 @@ def main(start_line=0):
                 thread_safe_print(f"Process for prestart test already terminated.")
 
     # Read domains from the input file
-    with open(list_file, "r", encoding="utf-8", errors="ignore") as domains_file:
+    with open(list_file, "r", encoding="utf-8") as domains_file:
         domains = domains_file.read().splitlines()
 
     # Initialize result file if it does not exist or is empty
