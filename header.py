@@ -15,7 +15,8 @@ result_filename = "./result.csv" # File where scan results will be stored
 get_timeout = 1.0                # Timeout duration (in seconds) for GET requests
 connect_timeout = 3.0            # Timeout duration (in seconds) for connection attempts
 threads = 10                     # Number of threads to use for scanning domains
-
+Main_config_name = "./main.json"
+xray_file_name = "./xray.exe"
 
 # Lock for thread-safe printing to the console and result file
 write_lock, print_lock = threading.Lock(), threading.Lock()
@@ -38,7 +39,7 @@ makedirs('./configs')
 
 def configer(domain, port_socks, port_http, config_index):
     # Read the base configuration template
-    with open("./main.json", "r", encoding="utf-8") as main_config_file:
+    with open(Main_config_name, "r", encoding="utf-8") as main_config_file:
         main_config = loads(main_config_file.read())
     # Update configuration with specific domain and ports
     main_config["outbounds"][0]["streamSettings"]["tcpSettings"]["header"]["request"]["headers"]["Host"] = domain
@@ -73,7 +74,7 @@ def scan_domain(domain, scanned_count, config_index):
         thread_safe_print(f"Error configuring domain {domain}: {e}")
         return
     # Run xray with the generated configuration
-    xray = Popen(["./xray.exe", "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+    xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
     try:
         # Create an HTTP client that uses the xray SOCKS proxy
         with Client(proxies=f'socks5://127.0.0.1:{port_socks}', timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
@@ -114,7 +115,7 @@ def main(start_line=0):
     # Perform an initial test to verify that xray and proxy configuration are working correctly
     try:
         config_filename = configer(first_test, port_socks, port_http, "prestart")
-        xray = Popen(["./xray.exe", "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+        xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
         with Client(proxies=f'socks5://127.0.0.1:{port_socks}', timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
             stime = perf_counter()
             req = client.get(url="https://www.gstatic.com/generate_204")
