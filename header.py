@@ -45,8 +45,11 @@ def make_xray_executable():
         except Exception as e:
             thread_safe_print(f"Warning: Could not make {xray_file_name} executable: {e}")
 make_xray_executable()
-shutil.rmtree('./configs', ignore_errors=True)
-makedirs('./configs')
+try:
+    shutil.rmtree('./configs', ignore_errors=True)
+    makedirs('./configs', exist_ok=True)
+except Exception as e:
+    thread_safe_print(f"Error preparing config directory: {e}")
 
 def configer(domain, port_socks, port_http, config_index):
     try:
@@ -79,8 +82,8 @@ def get_unique_ports():
             port_http = get_free_port()
             if port_socks != port_http:
                 return port_socks, port_http
-        except:
-            pass
+        except Exception as e:
+            thread_safe_print(f"Error getting unique ports: {e}")
         attempts += 1
     raise Exception("Could not find unique ports after multiple attempts")
 
@@ -121,16 +124,20 @@ def terminate_process(process):
             # Process already terminated
             pass
 def scan_domain(domain, scanned_count, config_index):
-    port_socks, port_http = get_unique_ports()
     try:
-        config_filename = configer(domain.strip(), port_socks, port_http, config_index)
+        port_socks, port_http = get_unique_ports()
     except Exception as e:
-        thread_safe_print(f"Error configuring domain {domain}: {e}")
+        thread_safe_print(f"{scanned_count}. {domain}, failed to acquire ports: {e}")
         return
 
-    xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
-    wait_for_port(port_socks)
+    config_filename = configer(domain.strip(), port_socks, port_http, config_index)
+    if not config_filename:
+        return
+
+    xray = None
     try:
+        xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+        wait_for_port(port_socks)
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
             stime = perf_counter()
@@ -143,7 +150,7 @@ def scan_domain(domain, scanned_count, config_index):
                         result_file.write(f"{domain},{int(latency * 1000)}\n")
                 thread_safe_print(f"{scanned_count}. {domain}: {int(latency * 1000)} ms")
     except Exception as e:
-        thread_safe_print(f"{scanned_count}. {domain}, TimeOut")
+        thread_safe_print(f"{scanned_count}. {domain}, Error: {e}")
     finally:
         terminate_process(xray)
 
@@ -153,12 +160,19 @@ def main(start_line=0):
         print(f"Error: Cannot write to {result_filename}. The file may be opened by another program. Please close it and try again.")
         exit()
 
-    port_socks, port_http = get_unique_ports()
+    try:
+        port_socks, port_http = get_unique_ports()
+    except Exception as e:
+        thread_safe_print(f"Error obtaining initial ports: {e}")
+        return
     xray = None
 
     # Prestart test
     try:
         config_filename = configer(first_test, port_socks, port_http, "prestart")
+        if not config_filename:
+            thread_safe_print(f"Prestart test {first_test} failed: config error")
+            return
         xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
         wait_for_port(port_socks)
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
@@ -170,21 +184,35 @@ def main(start_line=0):
                 latency = etime - stime
                 thread_safe_print(f"Prestart test {first_test}: {int(latency * 1000)} ms")
     except Exception as e:
-        thread_safe_print(f"Prestart test {first_test} TimeOut")
+        thread_safe_print(f"Prestart test {first_test} failed: {e}")
     finally:
         terminate_process(xray)
 
-    with open(list_file, "r", encoding="utf-8") as domains_file:
-        domains = domains_file.read().splitlines()
+    try:
+        with open(list_file, "r", encoding="utf-8") as domains_file:
+            domains = domains_file.read().splitlines()
+    except FileNotFoundError:
+        thread_safe_print(f"Error: Domain list file {list_file} not found.")
+        return
+    except Exception as e:
+        thread_safe_print(f"Error reading domain list file: {e}")
+        return
 
     if not os.path.exists(result_filename) or os.path.getsize(result_filename) == 0:
-        with open(result_filename, "a+") as result_file:
-            result_file.write("Domain,Delay\n")
+        try:
+            with open(result_filename, "a+") as result_file:
+                result_file.write("Domain,Delay\n")
+        except Exception as e:
+            thread_safe_print(f"Error initializing result file: {e}")
+            return
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
         futures = [executor.submit(scan_domain, domain, scanned_count + i, i) for i, domain in enumerate(domains[start_line:])]
         for future in as_completed(futures):
-            future.result()
+            try:
+                future.result()
+            except Exception as e:
+                thread_safe_print(f"Error scanning domain: {e}")
 
 if __name__ == "__main__":
     main(start_line)
