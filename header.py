@@ -101,7 +101,7 @@ def main(start_line=0):
     # Prestart test
     try:
         config_filename = configer(first_test, port_socks, port_http, "prestart")
-        xray = Popen([xray_file_name, "run -c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+        xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
             stime = perf_counter()
