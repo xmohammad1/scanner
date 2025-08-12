@@ -59,11 +59,18 @@ def configer(domain, port_socks, port_http, config_index):
     return config_filename
 
 def get_unique_ports():
-    while True:
-        port_socks = get_free_port()
-        port_http = get_free_port()
-        if port_socks != port_http:
-            return port_socks, port_http
+    max_attempts = 10
+    attempts = 0
+    while attempts < max_attempts:
+        try:
+            port_socks = get_free_port()
+            port_http = get_free_port()
+            if port_socks != port_http:
+                return port_socks, port_http
+        except:
+            pass
+        attempts += 1
+    raise Exception("Could not find unique ports after multiple attempts")
 
 def get_free_port() -> int:
     try:
