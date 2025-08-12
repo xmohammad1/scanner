@@ -1,9 +1,9 @@
 from subprocess import Popen, DEVNULL
 from json import loads, dumps
 from httpx import Client, Timeout
-from time import perf_counter, sleep
+from time import perf_counter
 from os import makedirs
-import shutil, os, socketserver, threading, platform
+import shutil, os, socket, socketserver, threading, platform
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -91,6 +91,20 @@ def get_free_port() -> int:
     except Exception as e:
         thread_safe_print(f"Error getting free port: {e}")
         raise
+
+
+def wait_for_port(port, host="127.0.0.1", timeout=5.0):
+    """Block until a TCP port on the given host starts accepting connections."""
+    deadline = perf_counter() + timeout
+    while perf_counter() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return
+        except OSError:
+            continue
+    raise TimeoutError(f"Timeout waiting for port {port}")
+
+
 def terminate_process(process):
     """Safely terminate a process"""
     if process and process.poll() is None:
@@ -115,7 +129,7 @@ def scan_domain(domain, scanned_count, config_index):
         return
 
     xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
-    sleep(0.5)
+    wait_for_port(port_socks)
     try:
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
@@ -146,7 +160,7 @@ def main(start_line=0):
     try:
         config_filename = configer(first_test, port_socks, port_http, "prestart")
         xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
-        sleep(0.5)
+        wait_for_port(port_socks)
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
             stime = perf_counter()
