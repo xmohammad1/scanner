@@ -5,6 +5,7 @@ from time import perf_counter
 from os import makedirs
 import shutil, os, socketserver, threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import platform
 
 
 # Script configuration
@@ -16,7 +17,10 @@ get_timeout = 1.0                # Timeout duration (in seconds) for GET request
 connect_timeout = 2.0            # Timeout duration (in seconds) for connection attempts
 threads = 1                     # Number of threads to use for scanning domains
 Main_config_name = "./main.json"
-xray_file_name = "./xray.exe"
+
+# Choose the correct Xray binary based on the operating system. Windows binaries
+# use the ``.exe`` extension while Unix-like systems typically don't.
+xray_file_name = "./xray.exe" if platform.system().lower() == "windows" else "./xray"
 
 # Lock for thread-safe printing to the console and result file
 write_lock, print_lock = threading.Lock(), threading.Lock()
@@ -125,7 +129,8 @@ def main(start_line=0):
 
     if not os.path.exists(result_filename) or os.path.getsize(result_filename) == 0:
         with open(result_filename, "a+") as result_file:
-            result_file.write("Domain,Delay\r")
+            # Use a newline suitable for the running platform
+            result_file.write(f"Domain,Delay{os.linesep}")
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
         futures = [executor.submit(scan_domain, domain, scanned_count + i, i) for i, domain in enumerate(domains[start_line:])]
