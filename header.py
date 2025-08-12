@@ -37,8 +37,15 @@ shutil.rmtree('./configs', ignore_errors=True)
 makedirs('./configs')
 
 def configer(domain, port_socks, port_http, config_index):
-    with open(Main_config_name, "r", encoding="utf-8") as main_config_file:
-        main_config = loads(main_config_file.read())
+    try:
+        with open(Main_config_name, "r", encoding="utf-8") as main_config_file:
+            main_config = loads(main_config_file.read())
+    except FileNotFoundError:
+        thread_safe_print(f"Error: {Main_config_name} not found!")
+        return None
+    except Exception as e:
+        thread_safe_print(f"Error reading config file: {e}")
+        return None
     main_config["outbounds"][0]["streamSettings"]["tcpSettings"]["header"]["request"]["headers"]["Host"] = domain
     main_config["inbounds"][0]["port"] = port_socks
     main_config["inbounds"][1]["port"] = port_http
@@ -55,8 +62,12 @@ def get_unique_ports():
             return port_socks, port_http
 
 def get_free_port() -> int:
-    with socketserver.TCPServer(("localhost", 0), None) as s:
-        return s.server_address[1]
+    try:
+        with socketserver.TCPServer(("localhost", 0), None) as s:
+            return s.server_address[1]
+    except Exception as e:
+        thread_safe_print(f"Error getting free port: {e}")
+        raise
 
 def scan_domain(domain, scanned_count, config_index):
     port_socks, port_http = get_unique_ports()
