@@ -36,7 +36,15 @@ def is_file_writable(filename):
         return True
     except IOError:
         return False
-
+def make_xray_executable():
+    """Make xray file executable on Linux/Unix systems"""
+    if platform.system() != "Windows":
+        try:
+            os.chmod(xray_file_name, 0o755)
+            thread_safe_print(f"Made {xray_file_name} executable")
+        except Exception as e:
+            thread_safe_print(f"Warning: Could not make {xray_file_name} executable: {e}")
+make_xray_executable()
 shutil.rmtree('./configs', ignore_errors=True)
 makedirs('./configs')
 
@@ -55,7 +63,7 @@ def configer(domain, port_socks, port_http, config_index):
     main_config["inbounds"][1]["port"] = port_http
     config_filename = f"./configs/config{config_index}.json"
     try:
-        with open(config_filename, "wt") as config_file:
+        with open(config_filename, "w") as config_file:
             config_file.write(dumps(main_config, indent=2))
     except Exception as e:
         thread_safe_print(f"Error writing config file: {e}")
@@ -83,7 +91,21 @@ def get_free_port() -> int:
     except Exception as e:
         thread_safe_print(f"Error getting free port: {e}")
         raise
-
+def terminate_process(process, domain):
+    """Safely terminate a process"""
+    if process and process.poll() is None:
+        try:
+            process.terminate()
+            # Give process time to terminate gracefully
+            try:
+                process.wait(timeout=2)
+            except:
+                # Force kill if terminate doesn't work
+                process.kill()
+                process.wait()
+        except (ProcessLookupError, OSError):
+            # Process already terminated
+            pass
 def scan_domain(domain, scanned_count, config_index):
     port_socks, port_http = get_unique_ports()
     try:
@@ -108,12 +130,7 @@ def scan_domain(domain, scanned_count, config_index):
     except Exception as e:
         thread_safe_print(f"{scanned_count}. {domain}, TimeOut")
     finally:
-        if xray.poll() is None:
-            try:
-                xray.terminate()
-                xray.wait()
-            except ProcessLookupError:
-                thread_safe_print(f"Process for domain {domain} already terminated.")
+        terminate_process(xray, domain)
 
 def main(start_line=0):
     scanned_count = start_line
@@ -139,19 +156,14 @@ def main(start_line=0):
     except Exception as e:
         thread_safe_print(f"Prestart test {first_test} TimeOut")
     finally:
-        if xray is not None and xray.poll() is None:
-            try:
-                xray.terminate()
-                xray.wait()
-            except ProcessLookupError:
-                thread_safe_print(f"Process for prestart test already terminated.")
+        terminate_process(xray, domain)
 
     with open(list_file, "r", encoding="utf-8") as domains_file:
         domains = domains_file.read().splitlines()
 
     if not os.path.exists(result_filename) or os.path.getsize(result_filename) == 0:
         with open(result_filename, "a+") as result_file:
-            result_file.write("Domain,Delay\r")
+            result_file.write("Domain,Delay\n")
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
         futures = [executor.submit(scan_domain, domain, scanned_count + i, i) for i, domain in enumerate(domains[start_line:])]
