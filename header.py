@@ -66,7 +66,7 @@ def scan_domain(domain, scanned_count, config_index):
         thread_safe_print(f"Error configuring domain {domain}: {e}")
         return
 
-    xray = Popen([xray_file_name, "run -c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+    xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
     try:
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
