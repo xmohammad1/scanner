@@ -1,7 +1,7 @@
 from subprocess import Popen, DEVNULL
 from json import loads, dumps
 from httpx import Client, Timeout
-from time import perf_counter
+from time import perf_counter, sleep
 from os import makedirs
 import shutil, os, socketserver, threading, platform
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -115,6 +115,7 @@ def scan_domain(domain, scanned_count, config_index):
         return
 
     xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+    sleep(0.5)
     try:
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
@@ -145,6 +146,7 @@ def main(start_line=0):
     try:
         config_filename = configer(first_test, port_socks, port_http, "prestart")
         xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+        sleep(0.5)
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
             stime = perf_counter()
