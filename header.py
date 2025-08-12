@@ -3,7 +3,7 @@ from json import loads, dumps
 from httpx import Client, Timeout
 from time import perf_counter
 from os import makedirs
-import shutil, os, socketserver, threading
+import shutil, os, socketserver, threading, platform
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -16,7 +16,11 @@ get_timeout = 1.0                # Timeout duration (in seconds) for GET request
 connect_timeout = 2.0            # Timeout duration (in seconds) for connection attempts
 threads = 1                     # Number of threads to use for scanning domains
 Main_config_name = "./main.json"
-xray_file_name = "./xray.exe"
+# Auto-detect operating system and set appropriate xray executable name
+if platform.system() == "Windows":
+    xray_file_name = "./xray.exe"
+else:  # Linux/Unix systems including Ubuntu
+    xray_file_name = "./xray"
 
 # Lock for thread-safe printing to the console and result file
 write_lock, print_lock = threading.Lock(), threading.Lock()
