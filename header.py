@@ -50,8 +50,12 @@ def configer(domain, port_socks, port_http, config_index):
     main_config["inbounds"][0]["port"] = port_socks
     main_config["inbounds"][1]["port"] = port_http
     config_filename = f"./configs/config{config_index}.json"
-    with open(config_filename, "wt") as config_file:
-        config_file.write(dumps(main_config))
+    try:
+        with open(config_filename, "wt") as config_file:
+            config_file.write(dumps(main_config, indent=2))
+    except Exception as e:
+        thread_safe_print(f"Error writing config file: {e}")
+        return None
     return config_filename
 
 def get_unique_ports():
