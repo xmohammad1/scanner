@@ -91,7 +91,7 @@ def get_free_port() -> int:
     except Exception as e:
         thread_safe_print(f"Error getting free port: {e}")
         raise
-def terminate_process(process, domain):
+def terminate_process(process):
     """Safely terminate a process"""
     if process and process.poll() is None:
         try:
@@ -130,7 +130,7 @@ def scan_domain(domain, scanned_count, config_index):
     except Exception as e:
         thread_safe_print(f"{scanned_count}. {domain}, TimeOut")
     finally:
-        terminate_process(xray, domain)
+        terminate_process(xray)
 
 def main(start_line=0):
     scanned_count = start_line
@@ -156,7 +156,7 @@ def main(start_line=0):
     except Exception as e:
         thread_safe_print(f"Prestart test {first_test} TimeOut")
     finally:
-        terminate_process(xray, domain)
+        terminate_process(xray)
 
     with open(list_file, "r", encoding="utf-8") as domains_file:
         domains = domains_file.read().splitlines()
