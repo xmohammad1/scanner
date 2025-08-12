@@ -3,7 +3,7 @@ from json import loads, dumps
 from httpx import Client, Timeout
 from time import perf_counter
 from os import makedirs
-import shutil, os, socketserver, threading
+import shutil, os, socketserver, threading, platform
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -47,6 +47,35 @@ def configer(domain, port_socks, port_http, config_index):
         config_file.write(dumps(main_config))
     return config_filename
 
+
+def run_xray(config_filename):
+    """Start the Xray process in a cross-platform manner.
+
+    On Windows the bundled ``xray.exe`` binary is used directly. On other
+    platforms the function first tries to locate a native ``xray`` executable
+    in ``PATH``. If it is not available, it falls back to running the bundled
+    Windows binary via ``wine``. If neither option is possible an informative
+    ``EnvironmentError`` is raised so the caller can surface a clear message
+    instead of timing out.
+    """
+
+    if platform.system() == "Windows":
+        cmd = [xray_file_name, "-c", config_filename]
+    else:
+        native = shutil.which("xray")
+        if native:
+            cmd = [native, "-c", config_filename]
+        else:
+            wine = shutil.which("wine")
+            if wine:
+                cmd = [wine, xray_file_name, "-c", config_filename]
+            else:
+                raise EnvironmentError(
+                    "Xray executable not found. Install a native 'xray' or 'wine'."
+                )
+
+    return Popen(cmd, stdout=DEVNULL, stderr=DEVNULL)
+
 def get_unique_ports():
     while True:
         port_socks = get_free_port()
@@ -66,7 +95,11 @@ def scan_domain(domain, scanned_count, config_index):
         thread_safe_print(f"Error configuring domain {domain}: {e}")
         return
 
-    xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+    try:
+        xray = run_xray(config_filename)
+    except Exception as e:
+        thread_safe_print(f"Error starting xray for domain {domain}: {e}")
+        return
     try:
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
@@ -101,7 +134,7 @@ def main(start_line=0):
     # Prestart test
     try:
         config_filename = configer(first_test, port_socks, port_http, "prestart")
-        xray = Popen([xray_file_name, "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+        xray = run_xray(config_filename)
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
             stime = perf_counter()
