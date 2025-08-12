@@ -3,7 +3,7 @@ from json import loads, dumps
 from httpx import Client, Timeout
 from time import perf_counter
 from os import makedirs
-import shutil, os, socketserver, threading
+import shutil, os, socketserver, threading, platform
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -16,7 +16,12 @@ get_timeout = 1.0                # Timeout duration (in seconds) for GET request
 connect_timeout = 2.0            # Timeout duration (in seconds) for connection attempts
 threads = 1                     # Number of threads to use for scanning domains
 Main_config_name = "./main.json"
-xray_file_name = "./xray.exe"
+
+# Choose the correct xray binary for the host OS
+if platform.system() == "Windows":
+    xray_file_name = "./xray.exe"
+else:
+    xray_file_name = "./xray"
 
 # Lock for thread-safe printing to the console and result file
 write_lock, print_lock = threading.Lock(), threading.Lock()
@@ -66,7 +71,7 @@ def scan_domain(domain, scanned_count, config_index):
         thread_safe_print(f"Error configuring domain {domain}: {e}")
         return
 
-    xray = Popen([xray_file_name, "run -c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+    xray = Popen([xray_file_name, "run", "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
     try:
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
@@ -101,7 +106,7 @@ def main(start_line=0):
     # Prestart test
     try:
         config_filename = configer(first_test, port_socks, port_http, "prestart")
-        xray = Popen([xray_file_name, "run -c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
+        xray = Popen([xray_file_name, "run", "-c", config_filename], stdout=DEVNULL, stderr=DEVNULL)
         with Client(proxy=f'socks5://127.0.0.1:{port_socks}',
                     timeout=Timeout(get_timeout, connect=connect_timeout)) as client:
             stime = perf_counter()
