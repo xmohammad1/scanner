@@ -14,7 +14,7 @@ list_file = "./List_1.txt"        # File that contains the list of domains to be
 result_filename = "./result.csv" # File where scan results will be stored
 get_timeout = 1.0                # Timeout duration (in seconds) for GET requests
 connect_timeout = 2.0            # Timeout duration (in seconds) for connection attempts
-threads = 1                     # Number of threads to use for scanning domains
+threads = 4                     # Number of threads to use for scanning domains
 Main_config_name = "./main.json"
 # Auto-detect operating system and set appropriate xray executable name
 if platform.system() == "Windows":
