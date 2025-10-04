@@ -1,9 +1,10 @@
 from subprocess import Popen, DEVNULL
 from json import loads, dumps
 from httpx import Client, Timeout
-from time import perf_counter
+from time import perf_counter, sleep
 from os import makedirs
 import shutil, os, socket, socketserver, threading, platform
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -24,6 +25,8 @@ else:  # Linux/Unix systems including Ubuntu
 
 # Lock for thread-safe printing to the console and result file
 write_lock, print_lock = threading.Lock(), threading.Lock()
+_config_cache_lock = threading.Lock()
+_cached_main_config = None
 
 def thread_safe_print(*args, **kwargs):
     with print_lock:
@@ -51,15 +54,26 @@ try:
 except Exception as e:
     thread_safe_print(f"Error preparing config directory: {e}")
 
+def _get_base_config():
+    global _cached_main_config
+    if _cached_main_config is None:
+        with _config_cache_lock:
+            if _cached_main_config is None:
+                try:
+                    with open(Main_config_name, "r", encoding="utf-8") as main_config_file:
+                        _cached_main_config = loads(main_config_file.read())
+                except FileNotFoundError:
+                    thread_safe_print(f"Error: {Main_config_name} not found!")
+                    return None
+                except Exception as e:
+                    thread_safe_print(f"Error reading config file: {e}")
+                    return None
+    return deepcopy(_cached_main_config) if _cached_main_config is not None else None
+
+
 def configer(domain, port_socks, port_http, config_index):
-    try:
-        with open(Main_config_name, "r", encoding="utf-8") as main_config_file:
-            main_config = loads(main_config_file.read())
-    except FileNotFoundError:
-        thread_safe_print(f"Error: {Main_config_name} not found!")
-        return None
-    except Exception as e:
-        thread_safe_print(f"Error reading config file: {e}")
+    main_config = _get_base_config()
+    if main_config is None:
         return None
     main_config["outbounds"][0]["streamSettings"]["tcpSettings"]["header"]["request"]["headers"]["Host"] = domain
     main_config["inbounds"][0]["port"] = port_socks
@@ -104,7 +118,7 @@ def wait_for_port(port, host="127.0.0.1", timeout=5.0):
             with socket.create_connection((host, port), timeout=0.5):
                 return
         except OSError:
-            continue
+            sleep(0.05)
     raise TimeoutError(f"Timeout waiting for port {port}")
 
 
@@ -153,6 +167,14 @@ def scan_domain(domain, scanned_count, config_index):
         thread_safe_print(f"{scanned_count}. {domain}, Error: {e}")
     finally:
         terminate_process(xray)
+
+def _determine_worker_count(desired_threads: int) -> int:
+    cpu_count = os.cpu_count() or 1
+    if cpu_count <= 2:
+        return 1
+    optimal = max(1, cpu_count - 1)
+    return max(1, min(desired_threads, optimal))
+
 
 def main(start_line=0):
     scanned_count = start_line
@@ -206,7 +228,11 @@ def main(start_line=0):
             thread_safe_print(f"Error initializing result file: {e}")
             return
 
-    with ThreadPoolExecutor(max_workers=threads) as executor:
+    worker_count = _determine_worker_count(threads)
+    if worker_count < threads:
+        thread_safe_print(f"Adjusting worker count from {threads} to {worker_count} based on system resources.")
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = [executor.submit(scan_domain, domain, scanned_count + i, i) for i, domain in enumerate(domains[start_line:])]
         for future in as_completed(futures):
             try:
