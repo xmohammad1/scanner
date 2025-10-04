@@ -1,10 +1,10 @@
 from subprocess import Popen, DEVNULL
 from json import loads, dumps
 from httpx import Client, Timeout
-from time import perf_counter
+from time import perf_counter, sleep
 from os import makedirs
-import shutil, os, socket, socketserver, threading, platform
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import shutil, os, socket, socketserver, threading, platform, copy
+from concurrent.futures import ThreadPoolExecutor
 
 
 # Script configuration
@@ -24,6 +24,8 @@ else:  # Linux/Unix systems including Ubuntu
 
 # Lock for thread-safe printing to the console and result file
 write_lock, print_lock = threading.Lock(), threading.Lock()
+_base_config_lock = threading.Lock()
+_base_config = None
 
 def thread_safe_print(*args, **kwargs):
     with print_lock:
@@ -36,6 +38,35 @@ def is_file_writable(filename):
         return True
     except IOError:
         return False
+
+
+def _load_base_config():
+    """Lazily load and cache the base xray configuration."""
+    global _base_config
+    if _base_config is not None:
+        return _base_config
+
+    with _base_config_lock:
+        if _base_config is not None:
+            return _base_config
+        try:
+            with open(Main_config_name, "r", encoding="utf-8") as main_config_file:
+                _base_config = loads(main_config_file.read())
+        except FileNotFoundError:
+            thread_safe_print(f"Error: {Main_config_name} not found!")
+            return None
+        except Exception as e:
+            thread_safe_print(f"Error reading config file: {e}")
+            return None
+    return _base_config
+
+
+def determine_worker_count():
+    """Return a conservative number of worker threads based on CPU capacity."""
+    cpu_count = os.cpu_count() or 1
+    if cpu_count <= 2:
+        return 1
+    return max(1, min(threads, cpu_count - 1))
 def make_xray_executable():
     """Make xray file executable on Linux/Unix systems"""
     if platform.system() != "Windows":
@@ -52,15 +83,16 @@ except Exception as e:
     thread_safe_print(f"Error preparing config directory: {e}")
 
 def configer(domain, port_socks, port_http, config_index):
+    base_config = _load_base_config()
+    if base_config is None:
+        return None
+
     try:
-        with open(Main_config_name, "r", encoding="utf-8") as main_config_file:
-            main_config = loads(main_config_file.read())
-    except FileNotFoundError:
-        thread_safe_print(f"Error: {Main_config_name} not found!")
-        return None
+        main_config = copy.deepcopy(base_config)
     except Exception as e:
-        thread_safe_print(f"Error reading config file: {e}")
+        thread_safe_print(f"Error preparing config copy: {e}")
         return None
+
     main_config["outbounds"][0]["streamSettings"]["tcpSettings"]["header"]["request"]["headers"]["Host"] = domain
     main_config["inbounds"][0]["port"] = port_socks
     main_config["inbounds"][1]["port"] = port_http
@@ -104,7 +136,9 @@ def wait_for_port(port, host="127.0.0.1", timeout=5.0):
             with socket.create_connection((host, port), timeout=0.5):
                 return
         except OSError:
+            sleep(0.05)
             continue
+        sleep(0.05)
     raise TimeoutError(f"Timeout waiting for port {port}")
 
 
@@ -206,13 +240,22 @@ def main(start_line=0):
             thread_safe_print(f"Error initializing result file: {e}")
             return
 
-    with ThreadPoolExecutor(max_workers=threads) as executor:
-        futures = [executor.submit(scan_domain, domain, scanned_count + i, i) for i, domain in enumerate(domains[start_line:])]
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                thread_safe_print(f"Error scanning domain: {e}")
+    worker_count = determine_worker_count()
+
+    def task_iterator():
+        for i, domain in enumerate(domains[start_line:]):
+            yield domain, scanned_count + i, i
+
+    def run_task(args):
+        domain, domain_index, config_index = args
+        scan_domain(domain, domain_index, config_index)
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        try:
+            for _ in executor.map(run_task, task_iterator()):
+                pass
+        except Exception as e:
+            thread_safe_print(f"Error scanning domain: {e}")
 
 if __name__ == "__main__":
     main(start_line)
