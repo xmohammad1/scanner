@@ -1,10 +1,11 @@
 from subprocess import Popen, DEVNULL
 from json import loads, dumps
 from httpx import Client, Timeout
-from time import perf_counter
+from time import perf_counter, sleep
 from os import makedirs
 import shutil, os, socket, socketserver, threading, platform
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 
 
 # Script configuration
@@ -24,6 +25,10 @@ else:  # Linux/Unix systems including Ubuntu
 
 # Lock for thread-safe printing to the console and result file
 write_lock, print_lock = threading.Lock(), threading.Lock()
+
+_config_template = None
+_config_template_error = False
+_config_template_lock = threading.Lock()
 
 def thread_safe_print(*args, **kwargs):
     with print_lock:
@@ -51,23 +56,37 @@ try:
 except Exception as e:
     thread_safe_print(f"Error preparing config directory: {e}")
 
+def _load_config_template():
+    global _config_template, _config_template_error
+    if _config_template is not None or _config_template_error:
+        return _config_template
+    with _config_template_lock:
+        if _config_template is not None or _config_template_error:
+            return _config_template
+        try:
+            with open(Main_config_name, "r", encoding="utf-8") as main_config_file:
+                _config_template = loads(main_config_file.read())
+        except FileNotFoundError:
+            thread_safe_print(f"Error: {Main_config_name} not found!")
+            _config_template_error = True
+        except Exception as e:
+            thread_safe_print(f"Error reading config file: {e}")
+            _config_template_error = True
+    return _config_template
+
+
 def configer(domain, port_socks, port_http, config_index):
-    try:
-        with open(Main_config_name, "r", encoding="utf-8") as main_config_file:
-            main_config = loads(main_config_file.read())
-    except FileNotFoundError:
-        thread_safe_print(f"Error: {Main_config_name} not found!")
+    template = _load_config_template()
+    if template is None:
         return None
-    except Exception as e:
-        thread_safe_print(f"Error reading config file: {e}")
-        return None
+    main_config = deepcopy(template)
     main_config["outbounds"][0]["streamSettings"]["tcpSettings"]["header"]["request"]["headers"]["Host"] = domain
     main_config["inbounds"][0]["port"] = port_socks
     main_config["inbounds"][1]["port"] = port_http
     config_filename = f"./configs/config{config_index}.json"
     try:
         with open(config_filename, "w") as config_file:
-            config_file.write(dumps(main_config, indent=2))
+            config_file.write(dumps(main_config, separators=(",", ":")))
     except Exception as e:
         thread_safe_print(f"Error writing config file: {e}")
         return None
@@ -104,7 +123,7 @@ def wait_for_port(port, host="127.0.0.1", timeout=5.0):
             with socket.create_connection((host, port), timeout=0.5):
                 return
         except OSError:
-            continue
+            sleep(0.05)
     raise TimeoutError(f"Timeout waiting for port {port}")
 
 
@@ -123,6 +142,12 @@ def terminate_process(process):
         except (ProcessLookupError, OSError):
             # Process already terminated
             pass
+
+
+def _scan_domain_from_tuple(params):
+    domain, scanned_count, config_index = params
+    scan_domain(domain, scanned_count, config_index)
+
 def scan_domain(domain, scanned_count, config_index):
     try:
         port_socks, port_http = get_unique_ports()
@@ -159,6 +184,10 @@ def main(start_line=0):
     if not is_file_writable(result_filename):
         print(f"Error: Cannot write to {result_filename}. The file may be opened by another program. Please close it and try again.")
         exit()
+
+    if _load_config_template() is None:
+        thread_safe_print("Cannot continue without a valid base configuration.")
+        return
 
     try:
         port_socks, port_http = get_unique_ports()
@@ -207,12 +236,9 @@ def main(start_line=0):
             return
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
-        futures = [executor.submit(scan_domain, domain, scanned_count + i, i) for i, domain in enumerate(domains[start_line:])]
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                thread_safe_print(f"Error scanning domain: {e}")
+        domain_params = ((domain, scanned_count + i, i) for i, domain in enumerate(domains[start_line:]))
+        for _ in executor.map(_scan_domain_from_tuple, domain_params):
+            pass
 
 if __name__ == "__main__":
     main(start_line)
