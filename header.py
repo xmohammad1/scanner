@@ -1,7 +1,8 @@
 from subprocess import Popen, DEVNULL
 from json import loads, dumps
 from httpx import Client, Timeout
-from time import perf_counter
+from time import perf_counter, sleep
+import copy
 from os import makedirs
 import shutil, os, socket, socketserver, threading, platform
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -51,16 +52,21 @@ try:
 except Exception as e:
     thread_safe_print(f"Error preparing config directory: {e}")
 
-def configer(domain, port_socks, port_http, config_index):
+def load_main_config():
     try:
         with open(Main_config_name, "r", encoding="utf-8") as main_config_file:
-            main_config = loads(main_config_file.read())
+            return loads(main_config_file.read())
     except FileNotFoundError:
         thread_safe_print(f"Error: {Main_config_name} not found!")
-        return None
     except Exception as e:
         thread_safe_print(f"Error reading config file: {e}")
+    return None
+
+
+def configer(domain, port_socks, port_http, config_index, base_config):
+    if base_config is None:
         return None
+    main_config = copy.deepcopy(base_config)
     main_config["outbounds"][0]["streamSettings"]["tcpSettings"]["header"]["request"]["headers"]["Host"] = domain
     main_config["inbounds"][0]["port"] = port_socks
     main_config["inbounds"][1]["port"] = port_http
@@ -104,7 +110,7 @@ def wait_for_port(port, host="127.0.0.1", timeout=5.0):
             with socket.create_connection((host, port), timeout=0.5):
                 return
         except OSError:
-            continue
+            sleep(0.05)
     raise TimeoutError(f"Timeout waiting for port {port}")
 
 
@@ -123,14 +129,14 @@ def terminate_process(process):
         except (ProcessLookupError, OSError):
             # Process already terminated
             pass
-def scan_domain(domain, scanned_count, config_index):
+def scan_domain(domain, scanned_count, config_index, base_config):
     try:
         port_socks, port_http = get_unique_ports()
     except Exception as e:
         thread_safe_print(f"{scanned_count}. {domain}, failed to acquire ports: {e}")
         return
 
-    config_filename = configer(domain.strip(), port_socks, port_http, config_index)
+    config_filename = configer(domain.strip(), port_socks, port_http, config_index, base_config)
     if not config_filename:
         return
 
@@ -160,6 +166,10 @@ def main(start_line=0):
         print(f"Error: Cannot write to {result_filename}. The file may be opened by another program. Please close it and try again.")
         exit()
 
+    base_config = load_main_config()
+    if base_config is None:
+        return
+
     try:
         port_socks, port_http = get_unique_ports()
     except Exception as e:
@@ -169,7 +179,7 @@ def main(start_line=0):
 
     # Prestart test
     try:
-        config_filename = configer(first_test, port_socks, port_http, "prestart")
+        config_filename = configer(first_test, port_socks, port_http, "prestart", base_config)
         if not config_filename:
             thread_safe_print(f"Prestart test {first_test} failed: config error")
             return
@@ -207,7 +217,10 @@ def main(start_line=0):
             return
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
-        futures = [executor.submit(scan_domain, domain, scanned_count + i, i) for i, domain in enumerate(domains[start_line:])]
+        futures = [
+            executor.submit(scan_domain, domain, scanned_count + i, i, base_config)
+            for i, domain in enumerate(domains[start_line:])
+        ]
         for future in as_completed(futures):
             try:
                 future.result()
